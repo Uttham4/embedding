@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transformer Embeddings from Scratch</title>
+<style>
+:root{--bg:#fafaf7;--card:#fff;--ink:#1c1c1a;--mut:#6b6b66;--line:#e2e1da;--acc:#1f6f5c}
+@media(prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ecebe4;--mut:#9a9990;--line:#33332e;--acc:#4fc3a1}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 system-ui,sans-serif}
+header{padding:18px 28px 0}h1{margin:0;font-size:24px}.sub{color:var(--mut);font-size:14px}
+nav{display:flex;gap:6px;padding:14px 28px 0;flex-wrap:wrap}nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 16px;border-radius:8px 8px 0 0;font-size:15px;cursor:pointer}
+nav button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+main{padding:20px 28px 40px;max-width:1150px}section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+input[type=text],textarea{width:100%;font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+button.go{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 18px;font:inherit;cursor:pointer;margin-top:8px}
+.row{display:flex;gap:14px;flex-wrap:wrap}.row>*{flex:1;min-width:280px}.mut{color:var(--mut);font-size:14px}
+.chip{display:inline-block;padding:3px 8px;margin:3px 3px 3px 0;border-radius:6px;font:15px ui-monospace,monospace;color:#222}.chip small{opacity:.55;font-size:11px;margin-left:4px}
+.hit{border-left:4px solid var(--acc);padding:6px 12px;margin:10px 0;background:var(--bg);border-radius:0 8px 8px 0;cursor:pointer}.hit b{color:var(--acc)}
+mark{background:#ffe27a;color:#222}canvas{max-width:100%}
+.bar{display:flex;align-items:center;gap:10px;margin:8px 0}.bar span{width:210px;font-size:14px}.bar i{display:block;height:22px;background:var(--acc);border-radius:4px}.bar em{font-style:normal;font-size:14px}
+table{border-collapse:collapse;font-size:14px;width:100%}td,th{padding:5px 10px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}
+</style></head><body>
+<header><h1>Transformer embeddings, built from scratch</h1><div class="sub">Everything below runs on the model we trained ourselves: our tokenizer, our vocabulary, our transformer.</div></header>
+<nav id="nav"></nav>
+<main>
+<section id="tokenizer"><div class="card"><b>1. Tokenizer</b> <span class="mut">Text becomes pieces from our learned vocabulary. Rare words split into smaller known pieces (<code>##</code> marks a continuation).</span>
+<textarea id="tk-in" rows="2">Unbelievably, transformers tokenize antidisestablishmentarianism!</textarea><button class="go" onclick="tok()">Tokenize</button><div id="tk-out" style="margin-top:12px"></div></div>
+<div class="card"><b>Vocabulary check: Zipf's law</b> <span class="mut">Real language gives a near-straight line on log-log axes.</span><br><canvas id="zipf" width="560" height="300"></canvas></div></section>
+
+<section id="embeddings"><div class="card"><b>2. Sentence similarity</b> <span class="mut">Each sentence becomes one vector. Similar meaning, similar vector. The strip shows the first 64 of its dimensions.</span>
+<div class="row"><input type="text" id="sa" value="A man is playing a guitar."><input type="text" id="sb" value="Someone is strumming a guitar."></div><button class="go" onclick="sim()">Compare</button>
+<div id="sim-out" style="margin-top:12px"></div></div>
+<div class="card"><b>Word neighbours</b> <span class="mut">Closest tokens in the learned embedding table.</span>
+<input type="text" id="nw" value="paris" style="max-width:260px"> <button class="go" onclick="nbr()">Find</button><div id="nb-out" style="margin-top:10px"></div></div></section>
+
+<section id="attention"><div class="card"><b>3. Attention</b> <span class="mut">Row = the token reading; column = the token it looks at; darker = more attention.</span>
+<textarea id="at-in" rows="1">The bank approved the loan after the river flooded.</textarea>
+Layer <select id="at-l"></select> Head <select id="at-h"></select> <button class="go" onclick="att()">Show</button><br><canvas id="att" width="620" height="620" style="margin-top:10px"></canvas></div></section>
+
+<section id="search"><div class="card"><b>4. Semantic search / Q&amp;A</b> <span class="mut">Finds the sentence most likely to contain the answer among Wikipedia sentences from SQuAD. Nothing is generated.</span>
+<input type="text" id="q" value="Which team won Super Bowl 50?" onkeydown="if(event.key=='Enter')ask()">
+<div style="margin-top:8px">Mode: <label><input type="radio" name="m" value="dense" checked> our embeddings</label> <label><input type="radio" name="m" value="bm25"> BM25 keywords</label> <label><input type="radio" name="m" value="hybrid"> hybrid</label>
+<button class="go" style="margin:0 0 0 14px" onclick="ask()">Search</button></div></div>
+<div class="row"><div class="card"><div id="res"></div></div><div class="card"><canvas id="map" width="560" height="470"></canvas><div class="mut">Each dot is a sentence (t-SNE), coloured by Wikipedia article. ★ = your question, placed at the weighted average of its nearest sentences.</div><div id="leg" class="mut"></div></div></div></section>
+
+<section id="score"><div class="card"><b>5. Scoreboard</b> <span class="mut">STS-Benchmark test, Spearman correlation with human similarity ratings</span><div id="sts"></div></div>
+<div class="card"><b>Retrieval on SQuAD dev</b> <span class="mut">gold sentence/paragraph known for each question</span><div id="ret"></div></div>
+<div class="row"><div class="card"><b>Pre-training loss</b><br><canvas id="c1" width="360" height="220"></canvas></div><div class="card"><b>Contrastive loss</b><br><canvas id="c2" width="360" height="220"></canvas></div><div class="card"><b>STS-B val during fine-tuning</b><br><canvas id="c3" width="360" height="220"></canvas></div></div>
+<div class="card" id="tkstats"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id),post=(u,d)=>fetch(u,{method:'POST',body:JSON.stringify(d)}).then(r=>r.json());
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(),esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const TABS=[['tokenizer','1 Tokenizer'],['embeddings','2 Embeddings'],['attention','3 Attention'],['search','4 Search'],['score','5 Scoreboard']];
+$('nav').innerHTML=TABS.map(([k,n])=>`<button id="b-${k}" onclick="show('${k}')">${n}</button>`).join('');
+function show(k){TABS.forEach(([t])=>{$(t).classList.toggle('on',t==k);$('b-'+t).classList.toggle('on',t==k)});if(k=='attention'&&!att.done)att()}
+const PAL=['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#0aa6b8','#c9a400','#f032e6','#7a9a01','#8c564b'];
+let INFO;
+async function tok(){const d=await post('/api/tokenize',{text:$('tk-in').value});if(d.error)return $('tk-out').textContent=d.error;
+ $('tk-out').innerHTML=d.pieces.map((p,i)=>`<span class="chip" style="background:hsl(${d.ids[i]*47%360},70%,${matchMedia('(prefers-color-scheme:dark)').matches?65:86}%)">${esc(p)}<small>${d.ids[i]}</small></span>`).join('')+
+ `<div class="mut" style="margin-top:8px">${d.words} words → ${d.pieces.length} tokens (${(d.pieces.length/Math.max(1,d.words)).toFixed(2)} tokens/word)</div>`}
+function strip(v){return '<div style="display:flex;height:26px;margin:4px 0">'+v.map(x=>`<i style="flex:1;background:${x>0?'rgba(31,111,92,'+Math.min(1,x*6)+')':'rgba(200,60,60,'+Math.min(1,-x*6)+')'}"></i>`).join('')+'</div>'}
+async function sim(){const d=await post('/api/similarity',{a:$('sa').value,b:$('sb').value});if(d.error)return $('sim-out').textContent=d.error;
+ $('sim-out').innerHTML=`<div style="font-size:26px"><b>cosine similarity ${d.cosine.toFixed(3)}</b></div>`+strip(d.a)+strip(d.b)}
+async function nbr(){const d=await post('/api/neighbors',{word:$('nw').value});$('nb-out').innerHTML=d.error?d.error:d.neighbors.map(([w,s])=>`<span class="chip" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)">${esc(w)}<small>${s}</small></span>`).join('')}
+async function att(){att.done=1;const l=+$('at-l').value,h=+$('at-h').value,d=await post('/api/attention',{text:$('at-in').value,layer:l});if(d.error)return;
+ const T=d.tokens.length,M=d.attn[h],cv=$('att'),g=cv.getContext('2d'),m=110,cs=Math.min(30,(cv.width-m)/T);g.clearRect(0,0,cv.width,cv.height);g.font='12px monospace';g.fillStyle=css('--ink');
+ for(let i=0;i<T;i++){g.textAlign='right';g.fillText(d.tokens[i],m-6,m+i*cs+cs/2+4);g.save();g.translate(m+i*cs+cs/2,m-6);g.rotate(-Math.PI/2);g.textAlign='left';g.fillText(d.tokens[i],0,4);g.restore()
+  for(let j=0;j<T;j++){g.fillStyle=`rgba(31,111,92,${Math.min(1,M[i][j]*1.4)})`;g.fillRect(m+j*cs,m+i*cs,cs-1,cs-1)}g.fillStyle=css('--ink')}}
+function mapDraw(q,hits){const mp=INFO.map,cv=$('map'),g=cv.getContext('2d'),W=cv.width-20,Hh=cv.height-20;g.clearRect(0,0,cv.width,cv.height);
+ mp.xy.forEach(([x,y],i)=>{g.fillStyle=mp.cat[i]<0?'#bbb8':PAL[mp.cat[i]];g.beginPath();g.arc(10+x*W,10+y*Hh,2.4,0,7);g.fill()});
+ (hits||[]).forEach(r=>{const[x,y]=mp.xy[r];g.strokeStyle=css('--ink');g.lineWidth=2;g.beginPath();g.arc(10+x*W,10+y*Hh,6,0,7);g.stroke()});
+ if(q){g.fillStyle='#d00';g.font='28px sans-serif';g.textAlign='center';g.fillText('★',10+q[0]*W,10+q[1]*Hh+9)}}
+async function ask(){const mode=document.querySelector('input[name=m]:checked').value,d=await post('/api/search',{query:$('q').value,k:5,mode});if(d.error)return $('res').textContent=d.error;
+ $('res').innerHTML=d.results.map((r,i)=>{const p=esc(r.paragraph),s=esc(r.sentence);return `<div class="hit" onclick="this.querySelector('.p').style.display='block'"><b>${i+1}.</b> ${s}<div class="mut">${esc(r.title)} · score ${r.score.toFixed(2)} (embedding ${r.dense.toFixed(2)}, BM25 ${r.bm25.toFixed(1)})</div><div class="p mut" style="display:none;margin-top:6px">${p.replace(s,'<mark>'+s+'</mark>')}</div></div>`}).join('');
+ mapDraw(d.query_xy,d.results.map(r=>r.row).filter(r=>r>=0))}
+function line(id,pts,col){const cv=$(id),g=cv.getContext('2d'),w=cv.width,h=cv.height,p=34;g.clearRect(0,0,w,h);if(!pts||!pts.length)return;
+ const xs=pts.map(a=>a[0]),ys=pts.map(a=>a[1]),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),X=x=>p+(x-x0)/((x1-x0)||1)*(w-p-10),Y=y=>h-p-(y-y0)/((y1-y0)||1)*(h-p-10);
+ g.strokeStyle=css('--line');g.strokeRect(p,10,w-p-10,h-p-10);g.fillStyle=css('--mut');g.font='11px sans-serif';g.fillText(y1.toFixed(2),2,16);g.fillText(y0.toFixed(2),2,h-p);g.fillText(x0,p,h-12);g.fillText(x1,w-40,h-12);
+ g.strokeStyle=col||css('--acc');g.lineWidth=2;g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(X(x),Y(y)):g.moveTo(X(x),Y(y)));g.stroke()}
+function scoreboard(){const m=INFO.metrics,s=m.sts||{},ref=m.reference_all_MiniLM_L6_v2;
+ const rows=[['random init',s.random_init],['after MLM pre-training',s.after_mlm],['after contrastive fine-tuning',s.after_contrastive]].filter(r=>r[1]).map(r=>[r[0],r[1].test]);
+ rows.push(['(ref) average GloVe, published',.5802],['(ref) SBERT-NLI-base, published',.7703]);if(ref)rows.push(['(ref) all-MiniLM-L6-v2',ref.sts_test]);
+ $('sts').innerHTML=rows.map(([n,v])=>`<div class="bar"><span>${n}</span><i style="width:${Math.max(0,v)*420}px;${n.startsWith('(ref')?'opacity:.45':''}"></i><em>${v.toFixed(3)}</em></div>`).join('');
+ const R=m.retrieval||{};if(ref&&ref.retrieval)R['MiniLM (ref)']=ref.retrieval;let t='<table><tr><th>method</th><th>level</th><th>R@1</th><th>R@5</th><th>R@10</th><th>MRR</th></tr>';
+ for(const k in R)for(const lv in R[k]){const r=R[k][lv];t+=`<tr><td>${k}</td><td>${lv}</td>${['R@1','R@5','R@10','MRR'].map(x=>`<td>${r[x].toFixed(3)}</td>`).join('')}</tr>`}$('ret').innerHTML=t+'</table>';
+ const tk=m.tokenizer||{};$('tkstats').innerHTML=`<b>Model &amp; tokenizer</b><div class="mut">${(m.params_millions||0).toFixed(1)}M parameters · vocab ${tk.vocab_size} · ${(tk.fertility||0).toFixed(2)} tokens/word · [UNK] rate ${((tk.unk_rate||0)*100).toFixed(3)}%`+(tk.bert_overlap!=null?` · ${(tk.bert_overlap*100).toFixed(0)}% of our vocab also in BERT's`:'')+`</div>`;
+ line('c1',INFO.curves.mlm);line('c2',INFO.curves.ft);line('c3',INFO.curves.sts_val)}
+function zipf(){const cv=$('zipf'),g=cv.getContext('2d'),z=INFO.zipf,p=40,w=cv.width,h=cv.height,lx=z.map(a=>Math.log10(a[0])),ly=z.map(a=>Math.log10(a[1])),x1=Math.max(...lx),y0=Math.min(...ly),y1=Math.max(...ly);
+ g.strokeStyle=css('--line');g.strokeRect(p,10,w-p-10,h-p-10);g.strokeStyle=css('--acc');g.lineWidth=2;g.beginPath();lx.forEach((x,i)=>{const X=p+x/x1*(w-p-10),Y=h-p-(ly[i]-y0)/(y1-y0||1)*(h-p-10);i?g.lineTo(X,Y):g.moveTo(X,Y)});g.stroke();
+ g.fillStyle=css('--mut');g.font='12px sans-serif';g.fillText('log10 token rank →',p+90,h-12);g.fillText('log10 freq',2,16)}
+fetch('/api/info').then(r=>r.json()).then(d=>{INFO=d;for(let i=0;i<d.layers;i++)$('at-l').add(new Option(i,i,0,i==d.layers-1));for(let i=0;i<d.heads;i++)$('at-h').add(new Option(i,i));
+ $('leg').innerHTML=d.map.titles.map((t,i)=>`<span style="color:${PAL[i]}">● ${esc(t)}</span>`).join(' &nbsp; ');zipf();scoreboard();mapDraw();tok();sim();nbr();ask()});
+show('tokenizer');
+</script></body></html>
