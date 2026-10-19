@@ -668,3 +668,5 @@ Every start-up stage prints a timestamp (imports, artifact sizes, each load, war
 * **Sentence-BERT** — Reimers & Gurevych, 2019 (contrastive sentence embeddings; STS-B reference numbers).
 * **BM25** — Robertson & Zaragoza, 2009. **Reciprocal rank fusion** — Cormack et al., 2009.
 * Optional pretrained models: `cross-encoder/ms-marco-MiniLM-L-6-v2`, `sentence-transformers/all-MiniLM-L6-v2`.
+
+Checkout https://embedding-k5s2.onrender.com for embedding results and a demo on my embedding modal
