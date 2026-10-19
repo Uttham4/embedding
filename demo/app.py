@@ -48,7 +48,7 @@ class BM25:
         Q = csr_matrix((np.ones(len(r)), (r, c)), shape=(len(queries), len(s.vocab))); return (Q @ s.W.T).toarray()
 
 ap = argparse.ArgumentParser(); ap.add_argument("--artifacts", default="artifacts"); ap.add_argument("--port", type=int, default=8000)
-ap.add_argument("--host", default="127.0.0.1", help="127.0.0.1 = this computer only; 0.0.0.0 = whole network")
+ap.add_argument("--host", default="127.0.0.1")
 ap.add_argument("--no-browser", action="store_true", help="do not auto-open a browser tab; open the printed URL yourself")
 args = ap.parse_args(); A = args.artifacts; HERE = os.path.dirname(os.path.abspath(__file__))
 dev = "cuda" if torch.cuda.is_available() else "cpu"
